@@ -105,7 +105,6 @@ jobs:
 
       - name: Set nightly branding
         run: |
-          echo "sha_short=$(git rev-parse --short HEAD)" >> $GITHUB_OUTPUT
           sed -i "s/const BRANDING = '';/const BRANDING = '+nightly.${{steps.vars.outputs.sha_short}}';/" lib/Froxlor/Froxlor.php
           zip -r froxlor-nightly.${{steps.vars.outputs.sha_short}}.zip . -x "*.git*"
           sha256sum froxlor-nightly.${{steps.vars.outputs.sha_short}}.zip > froxlor-nightly.${{steps.vars.outputs.sha_short}}.zip.sha256
