@@ -1,81 +1,79 @@
 name: Froxlor-CI-MariaDB
-on: ['push', 'pull_request', 'create']
+on: [ 'push', 'pull_request', 'create' ]
 
 jobs:
-  froxlor:
-    name: Froxlor (PHP ${{ matrix.php-versions }}, MariaDB ${{ matrix.mariadb-version }})
+  nightly:
+    name: Create nightly/testing tarball
     runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        php-versions: ['7.4', '8.2']
-        mariadb-version: [10.11, 10.5]
+    
     steps:
       - name: Checkout
         uses: actions/checkout@v3
 
-      - name: Setup PHP, with composer and extensions
+      - name: Setup PHP with PECL extension
         uses: shivammathur/setup-php@v2
         with:
-          php-version: ${{ matrix.php-versions }}
+          php-version: '7.4'
           tools: composer:v2
-          extensions: mbstring, xml, ctype, pdo_mysql, mysql, curl, json, zip, session, filter, posix, openssl, fileinfo, bcmath, gmp, gnupg
 
-      - name: Install tools
-        run: sudo apt-get install -y ant
-
-      - name: Adjust firewall
-        run: |
-          sudo ufw allow out 3306/tcp
-          sudo ufw allow in 3306/tcp
-
-      - name: Setup MariaDB
-        uses: getong/mariadb-action@v1.1
+      - name: Install Node.js
+        uses: actions/setup-node@v3
         with:
-          mariadb version: ${{ matrix.mariadb-version }}
-          mysql database: 'froxlor010'
-          mysql root password: 'fr0xl0r.TravisCI'
+          node-version: '20.x'
+      - name: Install npm dependencies
+        run: npm install
 
-      - name: Wait for database
-        run: sleep 15
+      - name: Build assets
+        run: npm run build
+        working-directory: .
 
-      - name: Setup databases
+      - name: Setting file/directory permissions
         run: |
-          mysql -h 127.0.0.1 --protocol=TCP -u root -pfr0xl0r.TravisCI -e "CREATE USER 'froxlor010'@'%' IDENTIFIED BY 'fr0xl0r.TravisCI';"
-          mysql -h 127.0.0.1 --protocol=TCP -u root -pfr0xl0r.TravisCI -e "GRANT ALL ON froxlor010.* TO 'froxlor010'@'%';"
-          php -r "echo include('install/froxlor.sql.php');" > /tmp/froxlor.sql
-          mysql -h 127.0.0.1 --protocol=TCP -u root -pfr0xl0r.TravisCI froxlor010 < /tmp/froxlor.sql
+          find -exec chmod ugo+r,u+w,go-w {} \;
+          find -type f -exec chmod ugo-x {} \;
+          find -type d -exec chmod ugo+x {} \;
+          chmod 0755 bin/froxlor-cli
 
-      - name: Run testing
-        run: ant quick-build
+      - name: Remove vcs and unneeded files
+        run: |
+          rm .gitignore
+          rm .editorconfig
+          rm -rf node_modules
+          rm composer.json
+          rm composer.lock
+          rm package.json
+          rm package-lock.json
+          rm *.xml
+          rm vite.config.js
 
-#      - name: irc push
-#        uses: rectalogic/notify-irc@v1
-#        if: github.event_name == 'push'
-#        with:
-#          channel: "#froxlor"
-#          server: "irc.libera.chat"
-#          nickname: froxlor-ci
-#          message: |
-#            ${{ github.actor }} pushed ${{ github.event.ref }} ${{ github.event.compare }}
-#            ${{ join(github.event.commits.*.message) }}
+      - name: Create empty index.html in built assets directory
+        run: |
+          touch templates/Froxlor/build/index.html
+          touch templates/Froxlor/build/assets/index.html
 
-#      - name: irc pull request
-#        uses: rectalogic/notify-irc@v1
-#        if: github.event_name == 'pull_request'
-#        with:
-#          channel: "#froxlor"
-#          server: "irc.libera.chat"
-#          nickname: froxlor-ci
-#          message: |
-#            ${{ github.actor }} opened PR ${{ github.event.pull_request.html_url }}
+      - name: Set nightly branding
+        run: |
+          sed -i "s/const BRANDING = '';/const BRANDING = '+nightly.${{GITHUB_SHA::7}}';/" lib/Froxlor/Froxlor.php
+          zip -r froxlor-nightly.${{GITHUB_SHA::7}}.zip . -x "*.git*"
+          sha256sum froxlor-nightly.${{GITHUB_SHA::7}}.zip > froxlor-nightly.${{GITHUB_SHA::7}}.zip.sha256
+          mkdir dist
+          mv froxlor-nightly.${{GITHUB_SHA::7}}.zip dist/
+          mv froxlor-nightly.${{GITHUB_SHA::7}}.zip.sha256 dist/
 
-#      - name: irc tag created
-#        uses: rectalogic/notify-irc@v1
-#        if: github.event_name == 'create' && github.event.ref_type == 'tag'
-#        with:
-#          channel: "#froxlor"
-#          server: "irc.libera.chat"
-#          nickname: froxlor-ci
-#          message: |
-#            ${{ github.actor }} tagged ${{ github.repository }} ${{ github.event.ref }}
+      - name: Archive production artifacts
+        uses: actions/upload-artifact@v3
+        with:
+          name: current-nightly
+          path: |
+            dist
+
+
+#      - name: Deploy nightly to server
+#        uses: easingthemes/ssh-deploy@v3.4.3
+#        env:
+#          ARGS: "-rltDzvO --chown=${{ secrets.WEB_USER }}:${{ secrets.WEB_USER }}"
+#          SOURCE: "dist/"
+#          SSH_PRIVATE_KEY: ${{ secrets.SERVER_SSH_KEY }}
+#          REMOTE_HOST: ${{ secrets.REMOTE_HOST }}
+#          REMOTE_USER: ${{ secrets.REMOTE_USER }}
+#          TARGET: "${{ secrets.REMOTE_TARGET }}/nightly/"
