@@ -27,7 +27,7 @@ jobs:
         run: npm run build
         working-directory: .
 
-      - name: Setting file/directory permissions
+      - name: Setting file/directory permissionsr
         run: |
           find -exec chmod ugo+r,u+w,go-w {} \;
           find -type f -exec chmod ugo-x {} \;
