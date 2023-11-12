@@ -1,4 +1,4 @@
-name: Froxlor-CI-MariaDB
+name: Froxlor-CI-MariaDB-test
 on: [ 'push', 'pull_request', 'create' ]
 
 jobs:
