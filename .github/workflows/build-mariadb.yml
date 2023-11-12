@@ -2,10 +2,58 @@ name: Froxlor-CI-MariaDB
 on: [ 'push', 'pull_request', 'create' ]
 
 jobs:
+  froxlor:
+    name: Froxlor (PHP ${{ matrix.php-versions }}, MariaDB ${{ matrix.mariadb-version }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        php-versions: [ '7.4', '8.2' ]
+        mariadb-version: [ 10.11, 10.5 ]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v3
+
+      - name: Setup PHP, with composer and extensions
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: ${{ matrix.php-versions }}
+          tools: composer:v2
+          extensions: mbstring, xml, ctype, pdo_mysql, mysql, curl, json, zip, session, filter, posix, openssl, fileinfo, bcmath, gmp, gnupg
+
+      - name: Install tools
+        run: sudo apt-get install -y ant
+
+      - name: Adjust firewall
+        run: |
+          sudo ufw allow out 3306/tcp
+          sudo ufw allow in 3306/tcp
+
+      - name: Setup MariaDB
+        uses: getong/mariadb-action@v1.1
+        with:
+          mariadb version: ${{ matrix.mariadb-version }}
+          mysql database: 'froxlor010'
+          mysql root password: 'fr0xl0r.TravisCI'
+
+      - name: Wait for database
+        run: sleep 15
+
+      - name: Setup databases
+        run: |
+          mysql -h 127.0.0.1 --protocol=TCP -u root -pfr0xl0r.TravisCI -e "CREATE USER 'froxlor010'@'%' IDENTIFIED BY 'fr0xl0r.TravisCI';"
+          mysql -h 127.0.0.1 --protocol=TCP -u root -pfr0xl0r.TravisCI -e "GRANT ALL ON froxlor010.* TO 'froxlor010'@'%';"
+          php -r "echo include('install/froxlor.sql.php');" > /tmp/froxlor.sql
+          mysql -h 127.0.0.1 --protocol=TCP -u root -pfr0xl0r.TravisCI froxlor010 < /tmp/froxlor.sql
+
+      - name: Run testing
+        run: ant quick-build
+
   nightly:
     name: Create nightly/testing tarball
     runs-on: ubuntu-latest
-    
+    needs: froxlor
+
     steps:
       - name: Checkout
         uses: actions/checkout@v3
@@ -27,7 +75,7 @@ jobs:
         run: npm run build
         working-directory: .
 
-      - name: Setting file/directory permissionsr
+      - name: Setting file/directory permissions
         run: |
           find -exec chmod ugo+r,u+w,go-w {} \;
           find -type f -exec chmod ugo-x {} \;
@@ -51,14 +99,18 @@ jobs:
           touch templates/Froxlor/build/index.html
           touch templates/Froxlor/build/assets/index.html
 
+      - name: Set outputs
+        id: vars
+        run: echo "sha_short=$(git rev-parse --short HEAD)" >> $GITHUB_OUTPUT
+
       - name: Set nightly branding
         run: |
-          sed -i "s/const BRANDING = '';/const BRANDING = '+nightly.${{github.event.after}}';/" lib/Froxlor/Froxlor.php
-          zip -r froxlor-nightly.${{github.event.after}}.zip . -x "*.git*"
-          sha256sum froxlor-nightly.${{github.event.after}}.zip > froxlor-nightly.${{github.event.after}}.zip.sha256
+          sed -i "s/const BRANDING = '';/const BRANDING = '+nightly.${{ steps.vars.outputs.sha_short }}';/" lib/Froxlor/Froxlor.php
+          zip -r froxlor-nightly.${{ steps.vars.outputs.sha_short }}.zip . -x "*.git*"
+          sha256sum froxlor-nightly.${{ steps.vars.outputs.sha_short }}.zip > froxlor-nightly.${{ steps.vars.outputs.sha_short }}.zip.sha256
           mkdir dist
-          mv froxlor-nightly.${{github.event.after}}.zip dist/
-          mv froxlor-nightly.${{github.event.after}}.zip.sha256 dist/
+          mv froxlor-nightly.${{ steps.vars.outputs.sha_short }}.zip dist/
+          mv froxlor-nightly.${{ steps.vars.outputs.sha_short }}.zip.sha256 dist/
 
       - name: Archive production artifacts
         uses: actions/upload-artifact@v3
