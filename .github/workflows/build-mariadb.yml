@@ -101,13 +101,13 @@ jobs:
 
       - name: Set nightly branding
         run: |
-          echo "sha_short=$(git rev-parse --short "$GITHUB_SHA")" >> "$GITHUB_ENV"
-          sed -i "s/const BRANDING = '';/const BRANDING = '+nightly.${{ github.env.sha_short }}';/" lib/Froxlor/Froxlor.php
-          zip -r froxlor-nightly.${{ github.env.sha_short }}.zip . -x "*.git*"
-          sha256sum froxlor-nightly.${{ github.env.sha_short }}.zip > froxlor-nightly.${{ github.env.sha_short }}.zip.sha256
+          echo "sha_short=$(git rev-parse --short "$GITHUB_SHA")" >> $GITHUB_ENV
+          sed -i "s/const BRANDING = '';/const BRANDING = '+nightly.${sha_short}';/" lib/Froxlor/Froxlor.php
+          zip -r froxlor-nightly.${sha_short}.zip . -x "*.git*"
+          sha256sum froxlor-nightly.${sha_short}.zip > froxlor-nightly.${sha_short}.zip.sha256
           mkdir dist
-          mv froxlor-nightly.${{ github.env.sha_short }}.zip dist/
-          mv froxlor-nightly.${{ github.env.sha_short }}.zip.sha256 dist/
+          mv froxlor-nightly.${sha_short}.zip dist/
+          mv froxlor-nightly.${sha_short}.zip.sha256 dist/
 
       - name: Archive production artifacts
         uses: actions/upload-artifact@v3
