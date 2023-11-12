@@ -99,10 +99,11 @@ jobs:
           touch templates/Froxlor/build/index.html
           touch templates/Froxlor/build/assets/index.html
 
-      #- name: Set vars
+      - name: Set vars
+        id: vars
+        run: echo "sha_short=$(git rev-parse --short HEAD)" >> $GITHUB_OUTPUT
 
       - name: Set nightly branding
-        id: vars
         run: |
           echo "sha_short=$(git rev-parse --short HEAD)" >> $GITHUB_OUTPUT
           sed -i "s/const BRANDING = '';/const BRANDING = '+nightly.${{steps.vars.outputs.sha_short}}';/" lib/Froxlor/Froxlor.php
